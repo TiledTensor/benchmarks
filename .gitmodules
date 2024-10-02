@@ -1,0 +1,3 @@
+[submodule "3rd-party/TiledCUDA"]
+	path = 3rd-party/TiledCUDA
+	url = git@github.com:TiledTensor/TiledCUDA.git
