@@ -1,3 +1,6 @@
 [submodule "3rd-party/TiledCUDA"]
 	path = 3rd-party/TiledCUDA
 	url = git@github.com:TiledTensor/TiledCUDA.git
+[submodule "3rd-party/cutlass"]
+	path = 3rd-party/cutlass
+	url = https://github.com/NVIDIA/cutlass
