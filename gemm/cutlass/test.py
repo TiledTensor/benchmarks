@@ -15,21 +15,20 @@ def run_unittest(a: Tensor,
                  kTN: int,
                  kTK: int,
                  warp_layout: Tuple,
-                 debug_print=True,
+                 debug_print=False,
                  epsilon: float = 5e-2):
     gemm_func(a, b, c, M, N, K, kTM, kTN, kTK, *warp_layout)
-
     ref_c = a @ b.t()
 
     if debug_print:
         print("Result:")
         print(c)
 
-        # print("\nReference:")
-        # print(ref_c)
+        print("\nReference:")
+        print(ref_c)
 
     avg_diff = (torch.sum(torch.abs(ref_c - c)) / (M * N)).item()
-    print("Average difference: {:.4f}".format(avg_diff))
+
     if avg_diff > epsilon:
         return False
     else:
@@ -54,33 +53,35 @@ def run_test(
     b = torch.randn(N, K, device=device, dtype=dtype)
     c = torch.zeros(M, N, device=device, dtype=dtype)
 
-    print(run_unittest(a, b, c, M, N, K, kTM, kTN, kTK, warp_layout))
+    if run_unittest(a, b, c, M, N, K, kTM, kTN, kTK, warp_layout):
+        print("Unittest passed")
+    else:
+        raise ValueError("Unittest failed")
 
-    # start_event = torch.cuda.Event(enable_timing=True)
-    # end_event = torch.cuda.Event(enable_timing=True)
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
 
-    # iters = 50
-    # start_event.record()
-    # for _ in range(iters):
-    #     gemm_func(a, b, c, M, N, K, kTM, kTN, kTK, *warp_layout)
-    # end_event.record()
-    # torch.cuda.synchronize()
+    iters = 50
+    start_event.record()
+    for _ in range(iters):
+        gemm_func(a, b, c, M, N, K, kTM, kTN, kTK, *warp_layout)
+    end_event.record()
+    torch.cuda.synchronize()
 
-    # time = start_event.elapsed_time(end_event) / iters
+    time = start_event.elapsed_time(end_event) / iters
 
-    time = 0.
     return time
 
 
 if __name__ == "__main__":
-    kM = 32
-    kN = 32
-    kK = 32
+    kM = 4096
+    kN = 2048
+    kK = 1024
 
-    kTM = 32
-    kTN = 32
-    kTK = 32
+    kTM = 128
+    kTN = 128
+    kTK = 128
 
-    time = run_test(kM, kN, kK, kTM, kTN, kTK, (1, 1))
+    time = run_test(kM, kN, kK, kTM, kTN, kTK, (2, 2))
 
-    print("Elapsed time: {:.4f}".format(time))
+    print("Elapsed time: {:.4f} ms".format(time))

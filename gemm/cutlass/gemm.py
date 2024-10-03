@@ -26,13 +26,12 @@ class GemmFunc(torch.autograd.Function):
         warp_per_col: int,
     ) -> Tensor:
         builder = Compile(file_prefix="gemm", tmp_dir="tmp")
-        # lib_name = builder.compile(M, N, K, kTM, kTN, kTK, warp_per_row,
-        #                            warp_per_col)
+        lib_name = builder.compile(M, N, K, kTM, kTN, kTK, warp_per_row,
+                                   warp_per_col)
 
-        # if lib_name is None:
-        #     raise RuntimeError("Failed to compile the library.")
+        if lib_name is None:
+            raise RuntimeError("Failed to compile the library.")
 
-        lib_name = "build/libcutlass_gemm.so"
         builder.apply(lib_name, [A, B, C], device=0)
         return C
 

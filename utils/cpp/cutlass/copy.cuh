@@ -2,12 +2,15 @@
 
 #include <cute/tensor.hpp>
 #include <cutlass/numeric_conversion.h>
-// #include <cutlass/numeric_types.h>
 
 namespace benchmarks {
 namespace cutlass_wrapper {
 
 using namespace cute;
+
+#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800))
+#define CP_ASYNC_SM80_ENABLED
+#endif
 
 template <int N>
 DEVICE void wait_group() {

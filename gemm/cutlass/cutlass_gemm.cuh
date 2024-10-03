@@ -6,8 +6,6 @@
 
 #include <cute/tensor.hpp>
 
-#include <iostream>
-
 namespace benchmarks {
 namespace cutlass_wrapper {
 
@@ -142,11 +140,6 @@ void cute_gemm(const Element* dA, const Element* dB, Element* dC) {
     using KeTraits = GemmTraits<Element, kWarpPerRow, kWarpPerCol, kM, kN, kK,
                                 kTM, kTN, kTK>;
 
-    std::cout << "kThreads: " << KeTraits::kThreads << std::endl
-              << "kNumPerAccess:" << KeTraits::kNumPerAccess << std::endl
-              << "threads layouts: " << KeTraits::kThreadsPerRow << ", "
-              << KeTraits::kThreadsPerCol << std::endl;
-
     static constexpr int smem_size =
         std::max(kTK * (kTN + kTM), kTM * kTN) * sizeof(Element);
 
@@ -168,5 +161,4 @@ void cute_gemm(const Element* dA, const Element* dB, Element* dC) {
     dim3 blockDim(kThreads, 1, 1);
 
     kernel<<<gridDim, blockDim, smem_size>>>(dA, dB, dC);
-    // cudaDeviceSynchronize();
 }

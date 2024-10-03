@@ -3,10 +3,6 @@
 namespace benchmarks {
 namespace cutlass_wrapper {
 
-#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800))
-#define CP_ASYNC_SM80_ENABLED
-#endif
-
 template <typename Element>
 struct TraitsBase {
     // the maximal width of vectorized access.
