@@ -2,7 +2,7 @@
 
 #include <cute/tensor.hpp>
 #include <cutlass/numeric_conversion.h>
-#include <cutlass/numeric_types.h>
+// #include <cutlass/numeric_types.h>
 
 namespace benchmarks {
 namespace cutlass_wrapper {
@@ -137,9 +137,9 @@ struct Shm2RegLoad {
     DTensorView& dst_view_;
 };
 
-template <const int m, const int n, typename TiledMma>
+template <const int kM, const int kN, typename TiledMma>
 DEVICE auto get_acc(const TiledMma& tiled_mma) {
-    auto acc = partition_fragment_C(tiled_mma, Shape<Int<m>, Int<n>>{});
+    auto acc = partition_fragment_C(tiled_mma, Shape<Int<kM>, Int<kN>>{});
     clear(acc);
 
     return acc;

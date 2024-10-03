@@ -25,8 +25,8 @@ def run_unittest(a: Tensor,
         print("Result:")
         print(c)
 
-        print("\nReference:")
-        print(ref_c)
+        # print("\nReference:")
+        # print(ref_c)
 
     avg_diff = (torch.sum(torch.abs(ref_c - c)) / (M * N)).item()
     print("Average difference: {:.4f}".format(avg_diff))
@@ -73,13 +73,13 @@ def run_test(
 
 
 if __name__ == "__main__":
-    kM = 16
-    kN = 16
-    kK = 16
+    kM = 32
+    kN = 32
+    kK = 32
 
-    kTM = 16
-    kTN = 16
-    kTK = 16
+    kTM = 32
+    kTN = 32
+    kTK = 32
 
     time = run_test(kM, kN, kK, kTM, kTN, kTK, (1, 1))
 

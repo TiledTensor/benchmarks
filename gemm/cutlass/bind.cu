@@ -7,6 +7,6 @@ extern "C" int kernel_entry(const __half* dA, const __half* dB, __half* dC) {
     auto* B = reinterpret_cast<const DType*>(dB);
     auto* C = reinterpret_cast<DType*>(dC);
 
-    cute_gemm<DType, 1, 1, 16, 16, 16, 16, 16, 16>(A, B, C);
+    cute_gemm<DType, 1, 1, 32, 32, 32, 32, 32, 32>(A, B, C);
     return 0;
 }
