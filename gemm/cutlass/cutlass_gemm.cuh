@@ -6,6 +6,8 @@
 
 #include <cute/tensor.hpp>
 
+#include <iostream>
+
 namespace benchmarks {
 namespace cutlass_wrapper {
 
@@ -25,28 +27,40 @@ struct GemmTraits : public Base {
                   "the N dimension of the CTA tile should be divisible by the "
                   "number of warps along that that dimension.");
 
-    using WarpLayout_ = Layout<Shape<Int<kWarpPerRow>, _1, Int<kWarpPerCol>>,
-                               Stride<Int<kWarpPerCol>, _1, _1>>;
-    using ValueLayout = Tile<Int<16 * kWarpPerRow>, _16, Int<16 * kWarpPerCol>>;
+    // using ThreadLayout = Layout<Shape<Int<kWarpPerRow>, Int<kWarpPerCol>,
+    // _1>,
+    //                             Stride<Int<kWarpPerCol>, _1, _1>>;
+    // using ValueLayout = Tile<Int<16 * kWarpPerRow>, Int<16 * kWarpPerCol>,
+    // _16>;
+
+    using ThreadLayout = Layout<Shape<_1, _1, _1>, Stride<_1, _1, _1>>;
+    using ValueLayout = Tile<_16, _16, _16>;
     using TiledMma = TiledMMA<MMA_Atom<SM80_16x8x16_F32F16F16F32_TN>,
-                              WarpLayout_, ValueLayout>;
+                              ThreadLayout, ValueLayout>;
 
     static constexpr int kThreads = size(TiledMma{});
     static_assert(kThreads == kWarpPerRow * kWarpPerCol * 32);
 
     static constexpr int kNumPerAccess = Base::kNumPerAccess;
-
     static constexpr int kThreadsPerCol = CeilDiv<kTK, Base::kNumPerAccess>;
     static constexpr int kThreadsPerRow = CeilDiv<kThreads, kThreadsPerCol>;
 
-    using SmemLayoutAtom = decltype(composition(
-        Swizzle<2, 3, 3>{}, Layout<Shape<_8, Int<4 * kNumPerAccess>>,
-                                   Stride<Int<4 * kNumPerAccess>, _1>>{}));
+    // using SmemLayoutAtom = decltype(composition(
+    //     Swizzle<2, 3, 3>{}, Layout<Shape<_8, Int<4 * kNumPerAccess>>,
+    //                                Stride<Int<4 * kNumPerAccess>, _1>>{}));
+    // using SmemLayoutA =
+    //     decltype(tile_to_shape(SmemLayoutAtom{}, Shape<Int<kTM>,
+    //     Int<kTK>>{}));
+    // using SmemLayoutB =
+    //     decltype(tile_to_shape(SmemLayoutAtom{}, Shape<Int<kTN>,
+    //     Int<kTK>>{}));
+    //   using SmemLayoutC =
+    //     decltype(tile_to_shape(SmemLayoutAtom{}, Shape<Int<kTM>,
+    //     Int<kTN>>{}));
 
-    using SmemLayoutA =
-        decltype(tile_to_shape(SmemLayoutAtom{}, Shape<Int<kTM>, Int<kTK>>{}));
-    using SmemLayoutB =
-        decltype(tile_to_shape(SmemLayoutAtom{}, Shape<Int<kTN>, Int<kTK>>{}));
+    using SmemLayoutA = Layout<Shape<Int<kTM>, Int<kTK>>, Stride<Int<kTK>, _1>>;
+    using SmemLayoutB = Layout<Shape<Int<kTN>, Int<kTK>>, Stride<Int<kTK>, _1>>;
+    using SmemLayoutC = Layout<Shape<Int<kTM>, Int<kTN>>, Stride<Int<kTN>, _1>>;
 
 #ifdef CP_ASYNC_SM80_ENABLED
     using CopyInstG2S =
@@ -69,8 +83,7 @@ struct GemmTraits : public Base {
         Layout<Shape<Int<kThreadsPerRow>, Int<kThreadsPerCol>>,
                Stride<Int<kThreadsPerCol>, _1>>{},
         Layout<Shape<_1, Int<Base::kNumPerAccess>>>{}));
-    using SmemLayoutC =
-        decltype(tile_to_shape(SmemLayoutAtom{}, Shape<Int<kTM>, Int<kTN>>{}));
+
     using StoreC_R2S = R2SCopy2D<Element, TiledMma, SmemLayoutC>;
 };
 
@@ -85,6 +98,15 @@ __global__ void gemm_kernel(const Element* dA, const Element* dB, Element* dC) {
     Element* gB_ptr = const_cast<Element*>(dB) + blockIdx.y * kK * kTN;
     Element* gC_ptr = dC + blockIdx.x * kTM * kN + blockIdx.y * kTN;
 
+    // if (threadIdx.x == 0) {
+    //     const __half* A = reinterpret_cast<const __half*>(dA);
+    //     for (int i = 0; i < 16 * 16; i++) {
+    //         printf("%.3f, ", __half2float(A[i]));
+
+    //         if (i && (i + 1) % 8 == 0) printf("\n");
+    //     }
+    // }
+
     // pointers to shared memory tiles
     Element* sA_ptr = shm;
     Element* sB_ptr = shm + kTM * kTK;
@@ -96,8 +118,6 @@ __global__ void gemm_kernel(const Element* dA, const Element* dB, Element* dC) {
     auto rA = make_s2rA(sA_ptr, typename KeTraits::SmemLayoutA{}, mma);
     auto rB = make_s2rB(sB_ptr, typename KeTraits::SmemLayoutB{}, mma);
     auto acc = get_acc<kTM, kTN>(mma);
-
-    typename KeTraits::StoreC_R2S sC;  // declare register to shared store plan
 
     for (int k = 0; k < kK; k += kTK) {  // iterator over K
         copy_tile_g2s(gA_ptr, sA_ptr,
@@ -122,13 +142,34 @@ __global__ void gemm_kernel(const Element* dA, const Element* dB, Element* dC) {
         gB_ptr += kTK;
     }
 
-    sC.copy(acc, shm);  // store register tile to shared memory
+    typename KeTraits::StoreC_R2S sC;  // declare register to shared store plan
+    sC.copy(acc, shm);                 // store register tile to shared memory
     __syncthreads();
+
+    if (threadIdx.x == 0) {
+        printf("Results in kernel SharedC:\n");
+        const __half* A = reinterpret_cast<const __half*>(sC_ptr);
+        for (int i = 0; i < 16 * 16; i++) {
+            printf("%.3f, ", __half2float(A[i]));
+
+            if (i && (i + 1) % 8 == 0) printf("\n");
+        }
+    }
 
     // store shared memory tile to global memory
     copy_tile_s2g(sC_ptr, gC_ptr, typename KeTraits::SmemLayoutC{},
                   Layout<Shape<Int<kTM>, Int<kTN>>, Stride<Int<kN>, _1>>{},
                   typename KeTraits::TiledCopyS2G{});
+
+    // if (threadIdx.x == 0) {
+    //     printf("Results in kernel GlobalC:\n");
+    //     const __half* A = reinterpret_cast<const __half*>(gC_ptr);
+    //     for (int i = 0; i < 16 * 16; i++) {
+    //         printf("%.3f, ", __half2float(A[i]));
+
+    //         if (i && (i + 1) % 8 == 0) printf("\n");
+    //     }
+    // }
 }
 }  // namespace cutlass_wrapper
 }  // namespace benchmarks
@@ -142,6 +183,11 @@ void cute_gemm(const Element* dA, const Element* dB, Element* dC) {
 
     using KeTraits =
         GemmTraits<Element, kWarpPerRow, kWarpPerCol, kTM, kTN, kTK>;
+
+    std::cout << "kThreads: " << KeTraits::kThreads << std::endl
+              << "kNumPerAccess:" << KeTraits::kNumPerAccess << std::endl
+              << "threads layouts: " << KeTraits::kThreadsPerRow << ", "
+              << KeTraits::kThreadsPerCol << std::endl;
 
     static constexpr int smem_size =
         std::max(kTK * (kTN + kTM), kTM * kTN) * sizeof(Element);
@@ -164,4 +210,5 @@ void cute_gemm(const Element* dA, const Element* dB, Element* dC) {
     dim3 blockDim(kThreads, 1, 1);
 
     kernel<<<gridDim, blockDim, smem_size>>>(dA, dB, dC);
+    // cudaDeviceSynchronize();
 }

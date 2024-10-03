@@ -81,8 +81,8 @@ struct R2SCopy2D {
 
   public:
     template <typename Engine, typename Layout>
-    DEVICE void copy(cute::Tensor<Engine, Layout> const& acc,
-                     Element* dst_data) {
+    __device__ void copy(cute::Tensor<Engine, Layout> const& acc,
+                         Element* dst_data) {
         int tid = threadIdx.x;
 
         // FIXME(haruhi): This implementation is specifically designed
