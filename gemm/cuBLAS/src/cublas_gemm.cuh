@@ -3,8 +3,9 @@
 
 #include <cublas_v2.h>
 
-// In this implementation, A and C is laid out in row-major, B, is laid out in
-// column-major: C[m, n] = A[m, k] @ B[k, n]
+namespace benchmarks {
+// In this implementation, A and C is laid out in row-major, B, is laid out
+// in column-major: C[m, n] = A[m, k] @ B[k, n]
 void cublas_hgemm(int64_t kM, int64_t kN, int64_t kK,  // problem shape
                   const __half* A, const __half* B, __half* C, float* time,
                   int64_t iters = 20, int64_t warm_up = 5) {
@@ -40,3 +41,4 @@ void cublas_hgemm(int64_t kM, int64_t kN, int64_t kK,  // problem shape
 
     cublasDestroy(handle);
 }
+}  // namespace benchmarks
