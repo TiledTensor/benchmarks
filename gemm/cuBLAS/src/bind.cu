@@ -5,6 +5,7 @@
 void gemm_op(int64_t m, int64_t n, int64_t k, const torch::Tensor& A,
              const torch::Tensor& B, torch::Tensor& C, torch::Tensor& time,
              int64_t iters = 20, int64_t warm_up = 5) {
+    using namespace benchmarks;
     using DType = __half;
 
     auto* dA = reinterpret_cast<const DType*>(A.data_ptr());
