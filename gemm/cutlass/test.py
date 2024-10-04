@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 
-from gemm import gemm_func
+from gemm import gemm_func as cutlass_gemm
 
 
 def run_unittest(a: Tensor,
@@ -17,7 +17,7 @@ def run_unittest(a: Tensor,
                  warp_layout: Tuple,
                  debug_print=False,
                  epsilon: float = 5e-2):
-    gemm_func(a, b, c, M, N, K, kTM, kTN, kTK, *warp_layout)
+    cutlass_gemm(a, b, c, M, N, K, kTM, kTN, kTK, *warp_layout)
     ref_c = a @ b.t()
 
     if debug_print:
@@ -27,7 +27,7 @@ def run_unittest(a: Tensor,
         print("\nReference:")
         print(ref_c)
 
-    avg_diff = (torch.sum(torch.abs(ref_c - c)) / (M * N)).item()
+    avg_diff = (torch.sum(torch.abs(ref_c - c) / (M * N))).item()
 
     if avg_diff > epsilon:
         return False
@@ -64,7 +64,7 @@ def run_test(
     iters = 50
     start_event.record()
     for _ in range(iters):
-        gemm_func(a, b, c, M, N, K, kTM, kTN, kTK, *warp_layout)
+        cutlass_gemm(a, b, c, M, N, K, kTM, kTN, kTK, *warp_layout)
     end_event.record()
     torch.cuda.synchronize()
 
@@ -75,8 +75,8 @@ def run_test(
 
 if __name__ == "__main__":
     kM = 4096
-    kN = 2048
-    kK = 1024
+    kN = 4096
+    kK = 2048
 
     kTM = 128
     kTN = 128

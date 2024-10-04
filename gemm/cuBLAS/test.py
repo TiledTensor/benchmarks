@@ -18,12 +18,14 @@ def gemm(m: int,
 
 
 if __name__ == '__main__':
-    M = 128
-    N = 128
-    K = 128
+    M = 4096
+    N = 4096
+    K = 2048
 
     device = torch.device("cuda")
     dtype = torch.float16
+
+    torch.manual_seed(1234)
 
     a = torch.randn(M, K, device=device, dtype=dtype)
     b = torch.randn(N, K, device=device, dtype=dtype)
@@ -34,7 +36,7 @@ if __name__ == '__main__':
     ref_c = a @ b.t()
 
     epsilon = 5e-2
-    avg_diff = (torch.sum(torch.abs(ref_c - c)) / (M * N)).item()
+    avg_diff = (torch.sum(torch.abs(ref_c - c) / (M * N))).item()
     if (avg_diff > epsilon):
         raise ValueError("Failed unittest.")
 
