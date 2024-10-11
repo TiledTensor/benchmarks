@@ -1,12 +1,17 @@
 import torch 
+import os
+
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+os.environ["TRITON_INTERPRET"] = '1'
 
 import triton
 import triton.language as tl
-import os
+
 
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 64}, num_stages=3, num_warps=8),
+        triton.Config({'BLOCK_M': 256, 'BLOCK_N': 32, 'BLOCK_K': 32}, num_stages=3, num_warps=8),
+        # triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'BLOCK_K': 32}, num_stages=3, num_warps=8)
     ],
     key = ['M', 'N', 'K']
 )
@@ -18,7 +23,7 @@ def _gemm_kernel(
     stride_am, stride_ak, 
     stride_bk, stride_bn, 
     stride_cm, stride_cn, 
-    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
     ):
 
     pid_m = tl.program_id(0)
@@ -40,13 +45,15 @@ def _gemm_kernel(
         
         a_ptrs += BLOCK_K * stride_ak
         b_ptrs += BLOCK_K * stride_bk
+    
+    c = acc.to(tl.float16)
         
     offset_cm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     offset_cn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     c_ptrs = c_ptr + (offset_cm[:, None] * stride_cm + offset_cn[None, :] * stride_cn)
     c_mask = (offset_cm[:, None] < M) & (offset_cn[None, :] < N)
     
-    tl.store(c_ptrs, acc, mask = c_mask)
+    tl.store(c_ptrs, c, mask = c_mask)
     
 def gemm(a, b):
     assert a.shape[1] == b.shape[0], "shape mismatch"
@@ -55,15 +62,16 @@ def gemm(a, b):
     M, K = a.shape 
     K, N = b.shape
     
-    c = torch.empty((M, N), device = a.device, dtype = torch.float32)
+    c = torch.empty((M, N), device = a.device, dtype = torch.float16)
     
-    grid = lambda META: (tl.cdiv(M, META['BLOCK_M']), tl.cdiv(N, META['BLOCK_N']))
+    def grid(META):
+        return (tl.cdiv(M, META['BLOCK_M']), tl.cdiv(N, META['BLOCK_N']), 1)
     
     _gemm_kernel[grid](
         a, b, c,
         M, N, K,
         a.stride(0), a.stride(1),
-        b.stride(0), b.stride(1),
+        b.stride(0), b.stride(1),  
         c.stride(0), c.stride(1)
     )
     return c

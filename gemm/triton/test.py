@@ -12,6 +12,9 @@ def bench():
     
     print(torch.allclose(triton_c, torch_c, atol = 1e-3))
     
+    print(triton_c.to(torch.device('cpu')))
+    print(torch_c.to(torch.device('cpu')))
+    
 
 if __name__ == '__main__':
     bench()
