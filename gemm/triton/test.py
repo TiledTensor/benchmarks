@@ -55,11 +55,10 @@ def bench(
     return time
     
     
-
 if __name__ == '__main__':    
-    M = 1024
-    N = 1024
-    K = 1024
+    M = 4096
+    N = 4096
+    K = 2048
     
     if run_unittest(M, N, K):
         print("Unittest passed")
