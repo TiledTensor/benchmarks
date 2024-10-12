@@ -46,14 +46,13 @@ def _gemm_kernel(
         a_ptrs += BLOCK_K * stride_ak
         b_ptrs += BLOCK_K * stride_bk
     
-    c = acc.to(tl.float16)
         
     offset_cm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     offset_cn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     c_ptrs = c_ptr + (offset_cm[:, None] * stride_cm + offset_cn[None, :] * stride_cn)
     c_mask = (offset_cm[:, None] < M) & (offset_cn[None, :] < N)
     
-    tl.store(c_ptrs, c, mask = c_mask)
+    tl.store(c_ptrs, acc, mask = c_mask)
     
 def gemm(a, b):
     assert a.shape[1] == b.shape[0], "shape mismatch"
