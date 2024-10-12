@@ -4,14 +4,16 @@ import gemm
 
 
 def run_unittest(
-    a: torch.Tensor,
-    b: torch.Tensor,
     M: int,
     N: int,
     K: int,
     debug_print=False,
     epsilon: float = 5e-2
-):
+):  
+    torch.manual_seed(0)
+    a = torch.randn(M, K, device = 'cuda', dtype = torch.float16)
+    b = torch.randn(K, N, device = 'cuda', dtype = torch.float16)
+    
     triton_c = gemm.gemm(a, b)
     torch_c = torch.mm(a, b)
     
@@ -29,27 +31,41 @@ def run_unittest(
     else:
         return True
 
-def bench():
+def bench(
+    M: int,
+    N: int,
+    K: int
+):
     torch.manual_seed(0)
     a = torch.randn(1024, 1024, device = 'cuda', dtype=torch.float16)
     b = torch.randn(1024, 1024, device = 'cuda', dtype=torch.float16)
     
-    triton_c = gemm.gemm(a, b)
-    torch_c = torch.mm(a, b)
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+
+    iters = 50
+    start_event.record()
+    for _ in range(iters):
+        triton_c = gemm.gemm(a, b)
+    end_event.record()
+    torch.cuda.synchronize()
+
+    time = start_event.elapsed_time(end_event) / iters
+
+    return time
     
     
 
-if __name__ == '__main__':
-    torch.manual_seed(0)
-    
+if __name__ == '__main__':    
     M = 1024
     N = 1024
     K = 1024
     
-    a = torch.randn(M, K, device = 'cuda', dtype = torch.float16)
-    b = torch.randn(K, N, device = 'cuda', dtype = torch.float16)
-    
-    if run_unittest(a, b, M, N, K):
+    if run_unittest(M, N, K):
         print("Unittest passed")
     else:
         print("Unittest failed")
+        
+    time = bench(M, N, K)
+    
+    print("Elapsed time: {:.4f} ms".format(time))
