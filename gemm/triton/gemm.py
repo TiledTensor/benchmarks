@@ -74,5 +74,3 @@ def gemm(a, b):
         c.stride(0), c.stride(1)
     )
     return c
-
-   
