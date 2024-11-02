@@ -11,10 +11,10 @@ namespace cutlass_wrapper {
 
 using namespace cute;
 
-template <typename Element_,                             //
-          const int kWarpPerRow, const int kWarpPerCol,  //
-          const int kM, const int kN, const int kK,      //
-          const int kTM, const int kTN, const int kTK,   //
+template <typename Element_,                                           //
+          const int kWarpPerRow, const int kWarpPerCol,                //
+          const int kM, const int kN, const int kK, const int kP,      //
+          const int kTM, const int kTN, const int kTK, const int kTP,  //
           typename Base = TraitsBase<Element_>>
 struct FusedGemmTraits : public Base {
     using Element = Element_;
@@ -23,6 +23,11 @@ struct FusedGemmTraits : public Base {
                   "Fused GEMM requires kTK == kTN == kTP.");
     static_assert(kWarpPerCol == 1,
                   "The Fused GEMM requires a single warp along CTA tile.");
+
+    using GmemLayoutA = Layout<Shape<Int<kTM>, Int<kTK>>, Stride<Int<kK>, _1>>;
+    using GmemLayoutB = Layout<Shape<Int<kTN>, Int<kTK>>, Stride<Int<kK>, _1>>;
+    using GmemLayoutC = Layout<Shape<Int<kTP>, Int<kTN>>, Stride<Int<kN>, _1>>;
+    using GmemLayoutD = Layout<Shape<Int<kTM>, Int<kTP>>, Stride<Int<kP>, _1>>;
 
     // TODO(haruhi): The current implementation uses ldmatrix.x4
     // instruction which requires the TileMMA configuration to be
@@ -80,5 +85,127 @@ struct FusedGemmTraits : public Base {
     using StoreD_R2S = R2SCopy2D<Element, TiledMma, SmemLayoutD>;
 };
 
+template <typename Element, const int kM, const int kN, const int kK,
+          const int kP, const int kTM, const int kTN, const int kTK,
+          const int kTP, typename KeTraits>
+__global__ void fused_gemm_kernel(const Element* dA, const Element* dB,
+                                  const Element* dC, Element* dD) {
+    // Advance to the global data tile to the current CTA.
+    Element* A = const_cast<Element*>(dA) + blockIdx.x * (kTM * kK);
+    Element* B = const_cast<Element*>(dB);
+    Element* gC_ptr = const_cast<Element*>(dC) + blockIdx.y * (kTP * kN);
+    Element* gD_ptr = dD + blockIdx.x * (kTM * kP) + (blockIdx.y * kTP);
+
+    Element* gA_ptr;
+    Element* gB_ptr;
+
+    extern __shared__ __align__(sizeof(double)) unsigned char shared_buf[];
+    auto* shm = reinterpret_cast<Element*>(shared_buf);
+    // pointers to shared memory tiles
+    Element* sA_ptr = shm;
+    Element* sB_ptr = shm + kTM * kTK;
+    Element* sC_ptr = shm + kTM * kTK + kTK * kTN;
+    Element* sD_ptr = shm;
+
+    typename KeTraits::TiledMma mma;  // for shared memory to register copy
+    typename KeTraits::TiledCopyG2S tiled_copy;
+
+    auto rA = make_s2rA(sA_ptr, typename KeTraits::SmemLayoutA{}, mma);
+    auto rB = make_s2rB(sB_ptr, typename KeTraits::SmemLayoutB{}, mma);
+    auto acc1 = get_acc<kTM, kTN>(mma);  // accumulator for the 1st gemm
+
+    auto rC = make_s2rB(sC_ptr, typename KeTraits::SmemLayoutC{}, mma);
+    auto acc2 = get_acc<kTM, kTP>(mma);  // accumulator for the 2nd gemm
+
+    typename KeTraits::StoreD_R2S sD;  // declare register to shared store plan
+
+    for (int n = 0; n < kN; n += kTN) {  // iterate over N
+        gA_ptr = A;                      // A tile is repeated loaded
+        gB_ptr = B + n * kK;
+        for (int k = 0; k < kK; k += kTK) {  // iterate over K
+            copy_tile_g2s(gA_ptr, sA_ptr, typename KeTraits::GmemLayoutA{},
+                          typename KeTraits::SmemLayoutA{}, tiled_copy);
+            copy_tile_g2s(gB_ptr, sB_ptr, typename KeTraits::GmemLayoutB{},
+                          typename KeTraits::SmemLayoutB{}, tiled_copy);
+            __copy_async();
+            __syncthreads();
+
+            // iterate over the register tiles along the kTK dimension
+            for (int i = 0; i < rA.get_iters(); ++i) {
+                rA.copy(i);  // load A register tile from shared memory
+                rB.copy(i);  // load B register tile from shared memory
+                cute::gemm(mma, rA[i], rB[i], acc1);  // compute
+            }
+            __syncthreads();
+
+            gA_ptr += kTK;
+            gB_ptr += kTK;
+        }
+        // The output type of the first tensor core matrix multiplication is
+        // float32. However, before the second GEMM operation, the output
+        // needs to be converted to half precision.
+        auto acc_half = convert_type<Element>(acc1);
+        auto rA2 = convert_layout<KeTraits::TiledMma>(acc_half);
+
+        // load C tile from global to shared memory
+        copy_tile_g2s(gC_ptr, sC_ptr, typename KeTraits::GmemLayoutC{},
+                      typename KeTraits::SmemLayoutC{},
+                      typename KeTraits::TiledCopyS2G{});
+        __copy_async();
+        __syncthreads();
+
+        // iterate over register tiles along the kTN dimension
+        for (int i = 0; i < rC.get_iters(); ++i) {
+            rC.copy(i);  // load C tile from shared memory to register
+            cute::gemm(mma, rA2[i], rC[i], acc2);  // compute
+        }
+        __syncthreads();
+
+        clear(acc1);
+        gC_ptr += kTN;
+    }
+
+    // store register tile to shared memory
+    sD.copy(acc2, shm);
+    __syncthreads();
+
+    copy_tile_s2g(sD_ptr, gD_ptr, typename KeTraits::SmemLayoutD{},
+                  typename KeTraits::GmemLayoutD{},
+                  typename KeTraits::TiledCopyS2G{});
+}
+
 }  // namespace cutlass_wrapper
 }  // namespace benchmarks
+
+template <typename Element,                                        //
+          const int kWarpPerRow, const int kWarpPerCol,            //
+          const int kM, const int kN, const int kK, const int kP,  //
+          const int kTM, const int kTN, const int kTK, const int kTP>
+void cute_fused_gemm(const Element* dA, const Element* dB, const Element* dC,
+                     Element* dD) {
+    using namespace benchmarks::cutlass_wrapper;
+
+    using KeTraits = FusedGemmTraits<Element, kWarpPerRow, kWarpPerCol, kM, kN,
+                                     kK, kP, kTM, kTN, kTK, kTP>;
+
+    static constexpr int smem_size =
+        std::max(kTK * (kTN + kTM), kTM * kTN) * sizeof(Element);
+
+    auto kernel = &fused_gemm_kernel<Element, kM, kN, kK, kP, kTM, kTN, kTK,
+                                     kTP, KeTraits>;
+
+    int shm_input = (kTM * kTK + kTK * kTN + kTN * kTP);
+    int shm_output = kTM * kTP;
+    int shm_size = shm_input < shm_output ? shm_output * sizeof(Element)
+                                          : shm_input * sizeof(Element);
+
+    // blocks are launched along the M and P dimensions.
+    int block_x = (kM + kTM - 1) / kTM;
+    int block_y = (kP + kTP - 1) / kTP;
+    const int kThreads = KeTraits::kThreads;
+
+    dim3 gridDim(block_x, block_y, 1);
+    dim3 blockDim(kThreads, 1, 1);
+
+    kernel<<<gridDim, blockDim, smem_size>>>(dA, dB, dC, dD);
+}
