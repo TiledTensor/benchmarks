@@ -21,6 +21,10 @@ inline constexpr int CeilDiv = (a + b - 1) / b;  // for compile-time values
 #define HOST inline
 #endif
 
+#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800))
+#define CP_ASYNC_SM80_ENABLED
+#endif
+
 const char* cublasGetErrorString(cublasStatus_t status) {
     switch (status) {
         case CUBLAS_STATUS_SUCCESS:

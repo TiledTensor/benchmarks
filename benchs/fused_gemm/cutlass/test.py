@@ -82,16 +82,16 @@ def run_test(
 
 
 if __name__ == "__main__":
-    kM = 4096
-    kN = 4096
-    kK = 2048
-    kP = 2048
+    kM = 256
+    kN = 256
+    kK = 256
+    kP = 256
 
-    kTM = 128
-    kTN = 128
-    kTK = 128
-    kTP = 128
+    kTM = 32
+    kTN = 32
+    kTK = 32
+    kTP = 32
 
-    time = run_test(kM, kN, kK, kP, kTM, kTN, kTK, kTP, (2, 1))
+    time = run_test(kM, kN, kK, kP, kTM, kTN, kTK, kTP, (1, 1))
 
     print("Elapsed time: {:.4f} ms".format(time))

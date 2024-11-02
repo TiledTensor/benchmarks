@@ -142,25 +142,29 @@ __global__ void fused_gemm_kernel(const Element* dA, const Element* dB,
             gA_ptr += kTK;
             gB_ptr += kTK;
         }
+
         // The output type of the first tensor core matrix multiplication is
         // float32. However, before the second GEMM operation, the output
         // needs to be converted to half precision.
         auto acc_half = convert_type<Element>(acc1);
         auto rA2 = convert_layout<KeTraits::TiledMma>(acc_half);
 
+        // TODO(KuangjuX): fix bugs: RuntimeError: CUDA error:
+        // CUBLAS_STATUS_NOT_INITIALIZED when calling `cublasCreate(handle)`
+
         // load C tile from global to shared memory
-        copy_tile_g2s(gC_ptr, sC_ptr, typename KeTraits::GmemLayoutC{},
-                      typename KeTraits::SmemLayoutC{},
-                      typename KeTraits::TiledCopyS2G{});
-        __copy_async();
-        __syncthreads();
+        // copy_tile_g2s(gC_ptr, sC_ptr, typename KeTraits::GmemLayoutC{},
+        //               typename KeTraits::SmemLayoutC{},
+        //               typename KeTraits::TiledCopyS2G{});
+        // __copy_async();
+        // __syncthreads();
 
         // iterate over register tiles along the kTN dimension
-        for (int i = 0; i < rC.get_iters(); ++i) {
-            rC.copy(i);  // load C tile from shared memory to register
-            cute::gemm(mma, rA2[i], rC[i], acc2);  // compute
-        }
-        __syncthreads();
+        // for (int i = 0; i < rC.get_iters(); ++i) {
+        //     rC.copy(i);  // load C tile from shared memory to register
+        //     cute::gemm(mma, rA2[i], rC[i], acc2);  // compute
+        // }
+        // __syncthreads();
 
         clear(acc1);
         gC_ptr += kTN;
@@ -200,6 +204,15 @@ void cute_fused_gemm(const Element* dA, const Element* dB, const Element* dC,
     int shm_size = shm_input < shm_output ? shm_output * sizeof(Element)
                                           : shm_input * sizeof(Element);
 
+    printf("shm_size: %d\n", shm_size);
+
+    // maximal statically allocated smem per block
+    const int kMaxSmemPerBlock = 48 * 1024;
+    if (smem_size > kMaxSmemPerBlock) {
+        cudaFuncSetAttribute(
+            kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
+    }
+
     // blocks are launched along the M and P dimensions.
     int block_x = (kM + kTM - 1) / kTM;
     int block_y = (kP + kTP - 1) / kTP;
@@ -208,5 +221,5 @@ void cute_fused_gemm(const Element* dA, const Element* dB, const Element* dC,
     dim3 gridDim(block_x, block_y, 1);
     dim3 blockDim(kThreads, 1, 1);
 
-    kernel<<<gridDim, blockDim, smem_size>>>(dA, dB, dC, dD);
+    kernel<<<gridDim, blockDim, smem_size, 0>>>(dA, dB, dC, dD);
 }
