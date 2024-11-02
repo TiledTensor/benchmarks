@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils/cpp/cuda_utils.cuh"
+#include "utils/cpp/cutlass/convert.cuh"
 #include "utils/cpp/cutlass/copy.cuh"
 #include "utils/cpp/cutlass/traits_base.cuh"
 
