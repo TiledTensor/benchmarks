@@ -1,11 +1,14 @@
 #pragma once
 #include "cuda_utils.hpp"
 
+#include <cute/layout.hpp>
 #include <cute/tensor.hpp>
 #include <cutlass/numeric_conversion.h>
 
 namespace benchmarks {
 namespace cutlass_wrapper {
+
+using namespace cute;
 
 namespace {
 template <typename To_type, typename Engine, typename Layout>

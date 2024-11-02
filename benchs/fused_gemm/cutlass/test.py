@@ -27,7 +27,7 @@ def run_unittest(a: Tensor,
 
     if debug_print:
         print("Result:")
-        print(c)
+        print(d)
 
         print("\nReference:")
         print(ref_d)
@@ -58,10 +58,10 @@ def run_test(
 
     a = torch.randn(M, K, device=device, dtype=dtype)
     b = torch.randn(N, K, device=device, dtype=dtype)
-    c = torch.randn(K, P, device=device, dtype=dtype)
+    c = torch.randn(P, N, device=device, dtype=dtype)
     d = torch.zeros(M, P, device=device, dtype=dtype)
 
-    if run_unittest(a, b, c, d, M, N, K, P, kTM, kTN, kTK, kTP, warp_layout):
+    if run_unittest(a, b, c, d, M, N, K, P, kTM, kTN, kTK, kTP, warp_layout, debug_print=True):
         print("Unittest passed")
     else:
         raise ValueError("Unittest failed")
