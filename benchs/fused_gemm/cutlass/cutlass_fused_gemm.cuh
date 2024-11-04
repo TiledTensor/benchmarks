@@ -149,9 +149,6 @@ __global__ void fused_gemm_kernel(const Element* dA, const Element* dB,
         auto acc_half = convert_type<Element>(acc1);
         auto rA2 = convert_layout<KeTraits::TiledMma>(acc_half);
 
-        // TODO(KuangjuX): fix bugs: RuntimeError: CUDA error:
-        // CUBLAS_STATUS_NOT_INITIALIZED when calling `cublasCreate(handle)`
-
         // load C tile from global to shared memory
         copy_tile_g2s(gC_ptr, sC_ptr, typename KeTraits::GmemLayoutC{},
                       typename KeTraits::SmemLayoutC{}, tiled_copy);
