@@ -247,9 +247,9 @@ template <typename Element,                              //
           const int kWarpPerRow, const int kWarpPerCol,  //
           const int kM, const int kN, const int kK,      //
           const int kTM, const int kTN, const int kTK>
-void lstm_cell(const Element* w, const Element* x, const Element* u,
-               const Element* c, const Element* h, Element* c_out,
-               Element* h_out) {
+void cute_lstm_cell(const Element* w, const Element* x, const Element* u,
+                    const Element* c, const Element* h, Element* c_out,
+                    Element* h_out) {
     static const int M = kM / 4;
     static const int N = kN;
 

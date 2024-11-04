@@ -26,7 +26,7 @@ class BatchGemmFunc(torch.autograd.Function):
         warp_per_row: int,
         warp_per_col: int,
     ) -> Tensor:
-        builder = Compile(file_prefix="gemm", tmp_dir="tmp")
+        builder = Compile(file_prefix="batched_gemm", tmp_dir="tmp")
         lib_name = builder.compile(M, N, K, BatchCount, kTM, kTN, kTK, warp_per_row,
                                    warp_per_col)
 
