@@ -4,7 +4,7 @@ from torch import Tensor
 from compile import Compile
 
 __all__ = [
-    "gemm_func",
+    "fused_gemm_func",
 ]
 
 
