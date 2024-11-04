@@ -34,6 +34,7 @@ class FusedGemmFunc(torch.autograd.Function):
 
         if lib_name is None:
             raise RuntimeError("Failed to compile the library.")
+        
 
         builder.apply(lib_name, [A, B, C, D], device=0)
         return D
