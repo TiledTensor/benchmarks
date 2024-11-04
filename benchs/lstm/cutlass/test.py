@@ -22,11 +22,8 @@ def run_unittest(w: Tensor,
                  debug_print=False,
                  epsilon: float = 5e-2):
     
-    print("Running unittest with M={}, N={}, K={}, kTM={}, kTN={}, kTK={}, warp_layout={}".format(
-        M, N, K, kTM, kTN, kTK, warp_layout
-    ))
     
-    cutlass_lstm(w, x, u, c0, h0, c1, h1, M, N, K, kTM, kTN, kTK, *warp_layout)
+    cutlass_lstm(w.flatten(), x.t().flatten(), u.flatten(), c0.flatten(), h0.t().flatten(), c1, h1, M, N, K, kTM, kTN, kTK, *warp_layout)
     
     # Input Gate
     i = torch.sigmoid(
@@ -47,17 +44,21 @@ def run_unittest(w: Tensor,
     
     ref_c1 = f * c0 + i * c
     ref_h1 = o * torch.tanh(c1)
+    
 
     if debug_print:
         print("Result:")
-        print(c1)
+        print("c: ", c1)
+        print("h: ", h1)
 
         print("\nReference:")
-        print(ref_c1)
+        print("c: ", ref_c1)
+        print("h: ", ref_h1)
 
     avg_diff = (torch.sum(torch.abs(ref_c1 - c1) / (M * N))).item()
 
     if avg_diff > epsilon:
+        print(f"Average difference: {avg_diff}")
         return False
     else:
         return True
@@ -72,9 +73,6 @@ def run_test(
     warp_layout: Tuple,
 ):
     
-    print("Running test with hidden_size={}, batch_size={}, kTM={}, kTN={}, kTK={}, warp_layout={}".format(
-        hidden_size, batch_size, kTM, kTN, kTK, warp_layout
-    ))
     
     device = torch.device("cuda")
     dtype = torch.float16
