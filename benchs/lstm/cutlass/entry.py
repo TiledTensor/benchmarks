@@ -1,7 +1,7 @@
-entry = """#include "../cutlass_gemm.cuh"
+entry = """#include "../cutlass_lstm.cuh"
 
 extern "C" int kernel_entry(const __half* dW, const __half* dX, const __half* dU,
-const __half* dC, const __half* dC, const __half* dH, __half* dCO, __half* dHO) {{
+const __half* dC, const __half* dH, __half* dCO, __half* dHO) {{
     using DType = cutlass::half_t;
 
     auto* W = reinterpret_cast<const DType*>(dW);

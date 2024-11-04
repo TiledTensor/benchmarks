@@ -21,6 +21,11 @@ def run_unittest(w: Tensor,
                  warp_layout: Tuple,
                  debug_print=False,
                  epsilon: float = 5e-2):
+    
+    print("Running unittest with M={}, N={}, K={}, kTM={}, kTN={}, kTK={}, warp_layout={}".format(
+        M, N, K, kTM, kTN, kTK, warp_layout
+    ))
+    
     cutlass_lstm(w, x, u, c0, h0, c1, h1, M, N, K, kTM, kTN, kTK, *warp_layout)
     
     # Input Gate
@@ -66,6 +71,11 @@ def run_test(
     kTK: int,
     warp_layout: Tuple,
 ):
+    
+    print("Running test with hidden_size={}, batch_size={}, kTM={}, kTN={}, kTK={}, warp_layout={}".format(
+        hidden_size, batch_size, kTM, kTN, kTK, warp_layout
+    ))
+    
     device = torch.device("cuda")
     dtype = torch.float16
 
@@ -83,7 +93,7 @@ def run_test(
     c1 = torch.zeros(hidden_size, batch_size, device=device, dtype=dtype)
     h1 = torch.zeros(hidden_size, batch_size, device=device, dtype=dtype)
 
-    if run_unittest(w, x, u, c0, h0, c1, h1, M, N, K, kTM, kTN, kTK, warp_layout):
+    if run_unittest(w, x, u, c0, h0, c1, h1, M, N, K, kTM, kTN, kTK, warp_layout, debug_print=True):
         print("Unittest passed")
     else:
         raise ValueError("Unittest failed")
@@ -107,9 +117,9 @@ if __name__ == "__main__":
     hidden_size = 1024
     batch_size = 256
 
-    kTM = 128
-    kTN = 128
-    kTK = 128
+    kTM = 32
+    kTN = 32
+    kTK = 32
 
     time = run_test(hidden_size, batch_size, kTM, kTN, kTK, (2, 2))
 

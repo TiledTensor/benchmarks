@@ -26,12 +26,11 @@ class LstmFunc(torch.autograd.Function):
         kTM: int,
         kTN: int,
         kTK: int,
-        kRK: int,
         warp_per_row: int,
         warp_per_col: int,
     ) -> Tensor:
         builder = Compile(file_prefix="lstm", tmp_dir="tmp")
-        lib_name = builder.compile(M, N, K, kTM, kTN, kTK, kRK, warp_per_row,
+        lib_name = builder.compile(M, N, K, kTM, kTN, kTK, warp_per_row,
                                    warp_per_col)
 
         if lib_name is None:

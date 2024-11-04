@@ -88,8 +88,6 @@ template <typename Element, const int kM, const int kN, const int kK,
 __global__ void lstm_gate_kernel(const Element* ws, const Element* us,
                                  const Element* xs, const Element* hs,
                                  Element* ts) {
-    using Element = Element_;
-
     extern __shared__ __align__(sizeof(double)) unsigned char shared_buf[];
     auto* shm = reinterpret_cast<Element*>(shared_buf);
 
@@ -128,14 +126,14 @@ __global__ void lstm_gate_kernel(const Element* ws, const Element* us,
     typename KeTraits::StoreE_R2S sts;  // declare register to shared store
 
     for (int k = 0; k < kK; k += kTK) {
-        copy_2d_tile_g2s(gws_ptr, sws_ptr, typename KeTraits::GmemLayoutA{},
-                         typename KeTraits::SmemLayoutA{}, tiled_copy);
-        copy_2d_tile_g2s(gxs_ptr, sxs_ptr, typename KeTraits::GmemLayoutB{},
-                         typename KeTraits::SmemLayoutB{}, tiled_copy);
-        copy_2d_tile_g2s(gus_ptr, sus_ptr, typename KeTraits::GmemLayoutC{},
-                         typename KeTraits::SmemLayoutC{}, tiled_copy);
-        copy_2d_tile_g2s(ghs_ptr, shs_ptr, typename KeTraits::GmemLayoutD{},
-                         typename KeTraits::SmemLayoutD{}, tiled_copy);
+        copy_tile_g2s(gws_ptr, sws_ptr, typename KeTraits::GmemLayoutA{},
+                      typename KeTraits::SmemLayoutA{}, tiled_copy);
+        copy_tile_g2s(gxs_ptr, sxs_ptr, typename KeTraits::GmemLayoutB{},
+                      typename KeTraits::SmemLayoutB{}, tiled_copy);
+        copy_tile_g2s(gus_ptr, sus_ptr, typename KeTraits::GmemLayoutC{},
+                      typename KeTraits::SmemLayoutC{}, tiled_copy);
+        copy_tile_g2s(ghs_ptr, shs_ptr, typename KeTraits::GmemLayoutD{},
+                      typename KeTraits::SmemLayoutD{}, tiled_copy);
 
         __copy_async();
         __syncthreads();
@@ -174,9 +172,9 @@ __global__ void lstm_gate_kernel(const Element* ws, const Element* us,
 
     __syncthreads();
 
-    copy_2d_tile_s2g(sts_ptr, gts_ptr, typename KeTraits::SmemLayoutE{},
-                     typename KeTraits::GmemLayoutE{},
-                     typename KeTraits::TiledCopyS2G{});
+    copy_tile_s2g(sts_ptr, gts_ptr, typename KeTraits::SmemLayoutE{},
+                  typename KeTraits::GmemLayoutE{},
+                  typename KeTraits::TiledCopyS2G{});
 }
 
 template <typename Element>
@@ -204,14 +202,12 @@ __global__ void lstm_element_wise(const Element* i, const Element* f,
     }
 }
 
-template <typename Element_,                             //
+template <typename Element,                              //
           const int kWarpPerRow, const int kWarpPerCol,  //
-          const int kM, const int kN, cont int kK,       //
+          const int kM, const int kN, const int kK,      //
           const int kTM, const int kTN, const int kTK>
 void lstm_gate(const Element* w, const Element* x, const Element* u,
                const Element* h, Element* t) {
-    using Element = Element_;
-
     using KeTraits = LstmTraits<Element, kWarpPerRow, kWarpPerCol, kM, kN, kK,
                                 kTM, kTN, kTK>;
 
@@ -226,7 +222,7 @@ void lstm_gate(const Element* w, const Element* x, const Element* u,
     const int kMaxSmemPerBlock = 48 * 1024;
     if (smem_size > kMaxSmemPerBlock) {
         cudaFuncSetAttribute(
-            lstm_gate, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
+            kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
     }
 
     const int block_m = (kM + kTM - 1) / kTM;
@@ -237,7 +233,7 @@ void lstm_gate(const Element* w, const Element* x, const Element* u,
     dim3 gridDim(block_m, block_n, 1);
     dim3 blockDim(kThreads, 1, 1);
 
-    kernel<<<gridDim, blockDim, smem_size>>>(w, u, x, h, t, m, n, k);
+    kernel<<<gridDim, blockDim, smem_size>>>(w, u, x, h, t);
 }
 
 }  // namespace cutlass_wrapper
@@ -255,7 +251,7 @@ void cute_lstm_cell(const Element* w, const Element* x, const Element* u,
 
     // Cuda malloc for output
     Element* t;
-    CudaCheck(cudaMalloc(&t, kM * kN * sizeof(Element)));
+    benchmarks::CudaCheck(cudaMalloc(&t, kM * kN * sizeof(Element)));
 
     benchmarks::cutlass_wrapper::lstm_gate<Element, kWarpPerRow, kWarpPerCol,
                                            kM, kN, kK, kTM, kTN, kTK>(w, x, u,
@@ -266,7 +262,8 @@ void cute_lstm_cell(const Element* w, const Element* x, const Element* u,
     const Element* o = t + 2 * M * N;
     const Element* c_candidate = t + 3 * M * N;
 
-    auto element_wise = &lstm_element_wise<Element>;
+    auto element_wise =
+        &benchmarks::cutlass_wrapper::lstm_element_wise<Element>;
 
     /*
     TODO: Use `kMaxThreads` will case a runtime error:
@@ -288,5 +285,5 @@ void cute_lstm_cell(const Element* w, const Element* x, const Element* u,
     element_wise<<<element_wise_grid_dim, element_wise_block_dim>>>(
         i, f, o, c_candidate, c, c_out, h_out, block_threads, size);
 
-    CudaCheck(cudaFree(t));
+    benchmarks::CudaCheck(cudaFree(t));
 }
