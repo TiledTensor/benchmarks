@@ -82,15 +82,15 @@ def run_test(
 
 
 if __name__ == "__main__":
-    kM = 256
-    kN = 256
-    kK = 256
-    kP = 256
+    kM = 1024
+    kN = 1024
+    kK = 1024
+    kP = 1024
 
-    kTM = 32
-    kTN = 32
-    kTK = 32
-    kTP = 32
+    kTM = 64
+    kTN = 64
+    kTK = 64
+    kTP = 64
 
     time = run_test(kM, kN, kK, kP, kTM, kTN, kTK, kTP, (1, 1))
 

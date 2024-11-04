@@ -189,9 +189,6 @@ void cute_fused_gemm(const Element* dA, const Element* dB, const Element* dC,
     using KeTraits = FusedGemmTraits<Element, kWarpPerRow, kWarpPerCol, kM, kN,
                                      kK, kP, kTM, kTN, kTK, kTP>;
 
-    static constexpr int smem_size =
-        std::max(kTK * (kTN + kTM), kTM * kTN) * sizeof(Element);
-
     auto kernel = &fused_gemm_kernel<Element, kM, kN, kK, kP, kTM, kTN, kTK,
                                      kTP, KeTraits>;
 
