@@ -179,29 +179,54 @@ __global__ void lstm_gate_kernel(const Element* ws, const Element* us,
                      typename KeTraits::TiledCopyS2G{});
 }
 
-}  // namespace cutlass_wrapper
-}  // namespace benchmarks
+template <typename Element>
+__global__ void lstm_element_wise(const Element* i, const Element* f,
+                                  const Element* o, const Element* c_candidate,
+                                  const Element* c, Element* c_out,
+                                  Element* h_out, const int block_size,
+                                  int size) {
+    int index = blockIdx.x * block_size + threadIdx.x;
+    if (index < size) {
+        // TODO: Loading data into shared memory and computing, versus
+        // computing directly in global memory, does not seem to make a
+        // difference. This seems to require further optimization, such as
+        // reconsidering redistributing data to different threads and performing
+        // vectorized loading and storing.
 
-template <typename Element,                              //
+        // This is a very naive kernel that loads data into shared memory and
+        // then performs computations. It has been temporarily commented out.
+
+        c_out[index] = f[index] * c[index] + i[index] * c_candidate[index];
+
+        __syncthreads();
+
+        h_out[index] = o[index] * tanh(c_out[index]);
+    }
+}
+
+template <typename Element_,                             //
           const int kWarpPerRow, const int kWarpPerCol,  //
-          const int kM, const int kN, const int kK,      //
+          const int kM, const int kN, cont int kK,       //
           const int kTM, const int kTN, const int kTK>
-void cute_gemm(const Element* dA, const Element* dB, Element* dC) {
-    using namespace benchmarks::cutlass_wrapper;
+void lstm_gate(const Element* w, const Element* x, const Element* u,
+               const Element* h, Element* t) {
+    using Element = Element_;
 
-    using KeTraits = GemmTraits<Element, kWarpPerRow, kWarpPerCol, kM, kN, kK,
+    using KeTraits = LstmTraits<Element, kWarpPerRow, kWarpPerCol, kM, kN, kK,
                                 kTM, kTN, kTK>;
 
     static constexpr int smem_size =
-        std::max(kTK * (kTN + kTM), kTM * kTN) * sizeof(Element);
+        std::max(kTK * (kTN + kTM) * 2, kTM * kTN) * sizeof(Element);
 
-    auto kernel = &gemm_kernel<Element, kM, kN, kK, kTM, kTN, kTK, KeTraits>;
+    // auto lstm_gate = &dyn_lstm_gate<Element, KeTraits>;
+    auto kernel =
+        &lstm_gate_kernel<Element, kM, kN, kK, kTM, kTN, kTK, KeTraits>;
 
     // maximal statically allocated smem per block
     const int kMaxSmemPerBlock = 48 * 1024;
     if (smem_size > kMaxSmemPerBlock) {
         cudaFuncSetAttribute(
-            kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
+            lstm_gate, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
     }
 
     const int block_m = (kM + kTM - 1) / kTM;
@@ -209,8 +234,59 @@ void cute_gemm(const Element* dA, const Element* dB, Element* dC) {
 
     const int kThreads = KeTraits::kThreads;
 
-    dim3 gridDim(block_m, block_n);
+    dim3 gridDim(block_m, block_n, 1);
     dim3 blockDim(kThreads, 1, 1);
 
-    kernel<<<gridDim, blockDim, smem_size>>>(dA, dB, dC);
+    kernel<<<gridDim, blockDim, smem_size>>>(w, u, x, h, t, m, n, k);
+}
+
+}  // namespace cutlass_wrapper
+}  // namespace benchmarks
+
+template <typename Element,                              //
+          const int kWarpPerRow, const int kWarpPerCol,  //
+          const int kM, const int kN, const int kK,      //
+          const int kTM, const int kTN, const int kTK>
+void lstm_cell(const Element* w, const Element* x, const Element* u,
+               const Element* c, const Element* h, Element* c_out,
+               Element* h_out) {
+    static const int M = kM / 4;
+    static const int N = kN;
+
+    // Cuda malloc for output
+    Element* t;
+    CudaCheck(cudaMalloc(&t, kM * kN * sizeof(Element)));
+
+    benchmarks::cutlass_wrapper::lstm_gate<Element, kWarpPerRow, kWarpPerCol,
+                                           kM, kN, kK, kTM, kTN, kTK>(w, x, u,
+                                                                      h, t);
+
+    const Element* i = t;
+    const Element* f = t + M * N;
+    const Element* o = t + 2 * M * N;
+    const Element* c_candidate = t + 3 * M * N;
+
+    auto element_wise = &lstm_element_wise<Element>;
+
+    /*
+    TODO: Use `kMaxThreads` will case a runtime error:
+    ```
+    RuntimeError: CUDA error: invalid configuration argument
+    CUDA kernel errors might be asynchronously reported at some other API call,
+    so the stacktrace below might be incorrect. For debugging consider passing
+    CUDA_LAUNCH_BLOCKING=1. Compile with `TORCH_USE_CUDA_DSA` to enable
+    device-side assertions.
+    ```
+    */
+    // int kMaxThreads = GetGPUMaxThreadsPerMultiProcessor(0);
+    int size = M * N;
+    const int block_threads = 512;
+    int block_size = (size + block_threads - 1) / block_threads;
+    dim3 element_wise_grid_dim(block_size, 1, 1);
+    dim3 element_wise_block_dim(block_threads, 1, 1);
+
+    element_wise<<<element_wise_grid_dim, element_wise_block_dim>>>(
+        i, f, o, c_candidate, c, c_out, h_out, block_threads, size);
+
+    CudaCheck(cudaFree(t));
 }
