@@ -4,11 +4,11 @@ from torch import Tensor
 from compile import Compile
 
 __all__ = [
-    "batch_gemm_func",
+    "batched_gemm_func",
 ]
 
 
-class BatchGemmFunc(torch.autograd.Function):
+class BatchedGemmFunc(torch.autograd.Function):
 
     @staticmethod
     def forward(
@@ -37,4 +37,4 @@ class BatchGemmFunc(torch.autograd.Function):
         return C
 
 
-batch_gemm_func = BatchGemmFunc.apply
+batched_gemm_func = BatchedGemmFunc.apply
