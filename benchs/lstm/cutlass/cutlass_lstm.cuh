@@ -30,7 +30,7 @@ struct LstmTraits : public Base {
     // declare global to shared memory copy layout.
     using GmemLayoutA = Layout<Shape<Int<kTM>, Int<kTK>>, Stride<Int<kK>, _1>>;
     using GmemLayoutB = Layout<Shape<Int<kTN>, Int<kTK>>, Stride<Int<kK>, _1>>;
-    using GmemLayoutC = Layout<Shape<Int<kTM>, Int<kTN>>, Stride<Int<kN>, _1>>;
+    using GmemLayoutC = Layout<Shape<Int<kTM>, Int<kTK>>, Stride<Int<kK>, _1>>;
     using GmemLayoutD = Layout<Shape<Int<kTN>, Int<kTK>>, Stride<Int<kK>, _1>>;
     using GmemLayoutE = Layout<Shape<Int<kTM>, Int<kTN>>, Stride<Int<kN>, _1>>;
 
@@ -214,7 +214,6 @@ void lstm_gate(const Element* w, const Element* x, const Element* u,
     static constexpr int smem_size =
         std::max(kTK * (kTN + kTM) * 2, kTM * kTN) * sizeof(Element);
 
-    // auto lstm_gate = &dyn_lstm_gate<Element, KeTraits>;
     auto kernel =
         &lstm_gate_kernel<Element, kM, kN, kK, kTM, kTN, kTK, KeTraits>;
 

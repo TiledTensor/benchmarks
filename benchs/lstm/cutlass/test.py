@@ -21,9 +21,15 @@ def run_unittest(w: Tensor,
                  warp_layout: Tuple,
                  debug_print=False,
                  epsilon: float = 5e-2):
+    wdata = w.flatten()
+    xdata = x.t().flatten()
+    udata = u.flatten()
+    c0data = c0.flatten()
+    h0data = h0.t().flatten()
+    c1data = c1.flatten()
+    h1data = h1.flatten()
     
-    
-    cutlass_lstm(w.flatten(), x.t().flatten(), u.flatten(), c0.flatten(), h0.t().flatten(), c1, h1, M, N, K, kTM, kTN, kTK, *warp_layout)
+    cutlass_lstm(wdata, xdata, udata, c0data, h0data, c1data, h1data, M, N, K, kTM, kTN, kTK, *warp_layout)
     
     # Input Gate
     i = torch.sigmoid(
@@ -44,7 +50,8 @@ def run_unittest(w: Tensor,
     
     ref_c1 = f * c0 + i * c
     ref_h1 = o * torch.tanh(c1)
-    
+    c1 = c1.view(hidden_size, batch_size)
+    h1 = h1.view(hidden_size, batch_size)
 
     if debug_print:
         print("Result:")
@@ -88,8 +95,8 @@ def run_test(
     u = torch.randn(4, hidden_size, hidden_size, device=device, dtype=dtype)
     c0 = torch.randn(hidden_size, batch_size, device=device, dtype=dtype)
     h0 = torch.randn(hidden_size, batch_size, device=device, dtype=dtype)
-    c1 = torch.zeros(hidden_size, batch_size, device=device, dtype=dtype)
-    h1 = torch.zeros(hidden_size, batch_size, device=device, dtype=dtype)
+    c1 = torch.empty(hidden_size, batch_size, device=device, dtype=dtype)
+    h1 = torch.empty(hidden_size, batch_size, device=device, dtype=dtype)
 
     if run_unittest(w, x, u, c0, h0, c1, h1, M, N, K, kTM, kTN, kTK, warp_layout, debug_print=True):
         print("Unittest passed")
