@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 
-from batched_gemm import batch_gemm_func as cutlass_batch_gemm
+from batched_gemm import batched_gemm_func as cutlass_batched_gemm
 
 
 def run_unittest(a: Tensor,
@@ -18,7 +18,7 @@ def run_unittest(a: Tensor,
                  warp_layout: Tuple,
                  debug_print=False,
                  epsilon: float = 5e-2):
-    cutlass_batch_gemm(a, b, c, M, N, K, BatchCount, kTM, kTN, kTK, *warp_layout)
+    cutlass_batched_gemm(a, b, c, M, N, K, BatchCount, kTM, kTN, kTK, *warp_layout)
     ref_c = torch.bmm(a.view(BatchCount, M, K), b.transpose(1, 2).view(BatchCount, K, N))
 
     if debug_print:
@@ -66,7 +66,7 @@ def run_test(
     iters = 50
     start_event.record()
     for _ in range(iters):
-        cutlass_batch_gemm(a, b, c, M, N, K, BatchCount, kTM, kTN, kTK, *warp_layout)
+        cutlass_batched_gemm(a, b, c, M, N, K, BatchCount, kTM, kTN, kTK, *warp_layout)
     end_event.record()
     torch.cuda.synchronize()
 

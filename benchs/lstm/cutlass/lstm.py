@@ -4,37 +4,40 @@ from torch import Tensor
 from compile import Compile
 
 __all__ = [
-    "batched_gemm_func",
+    "lstm_func",
 ]
 
 
-class BatchedGemmFunc(torch.autograd.Function):
+class LstmFunc(torch.autograd.Function):
 
     @staticmethod
     def forward(
         ctx,
-        A: Tensor,
-        B: Tensor,
+        W: Tensor,
+        X: Tensor,
+        U: Tensor,
         C: Tensor,
+        H: Tensor,
+        CO: Tensor,
+        HO: Tensor,
         M: int,
         N: int,
         K: int,
-        BatchCount: int,
         kTM: int,
         kTN: int,
         kTK: int,
         warp_per_row: int,
         warp_per_col: int,
     ) -> Tensor:
-        builder = Compile(file_prefix="batched_gemm", tmp_dir="tmp")
-        lib_name = builder.compile(M, N, K, BatchCount, kTM, kTN, kTK, warp_per_row,
+        builder = Compile(file_prefix="lstm", tmp_dir="tmp")
+        lib_name = builder.compile(M, N, K, kTM, kTN, kTK, warp_per_row,
                                    warp_per_col)
 
         if lib_name is None:
             raise RuntimeError("Failed to compile the library.")
 
-        builder.apply(lib_name, [A, B, C], device=0)
+        builder.apply(lib_name, [W, X, U, C, H, CO, HO], device=0)
         return C
 
 
-batched_gemm_func = BatchedGemmFunc.apply
+lstm_func = LstmFunc.apply
